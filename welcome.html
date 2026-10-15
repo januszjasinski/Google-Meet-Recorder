@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meet Recorder Setup</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="base.css">
+  <style>
+    .hero { display: flex; align-items: center; gap: 16px; }
+    .hero img { flex: none; }
+    .hero p { margin: 4px 0 0; color: var(--muted); }
+    .step-num { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-right: 8px; border-radius: 50%; background: var(--accent-soft); color: var(--accent); font-size: 12.5px; vertical-align: 1px; }
+    .mic-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 12px; }
+    .mic-status.ok { color: var(--ok); font-weight: 600; }
+    .mic-status.bad { color: var(--rec); }
+    ol { margin: 0; padding-left: 20px; }
+    li + li { margin-top: 6px; }
+    .highlight { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <header class="hero">
+      <img src="icons/icon128.png" alt="" width="56" height="56">
+      <div>
+        <h1>Meet Recorder is ready</h1>
+        <p>Record Google Meet calls and get a transcript with speaker names. Everything stays on this computer.</p>
+      </div>
+    </header>
+
+    <section class="card" id="mic-card">
+      <h2><span class="step-num">1</span>Allow your microphone</h2>
+      <p>Chrome lets the extension hear the other participants on its own. To include <em>your</em> voice in recordings, allow microphone access once.</p>
+      <div class="mic-row">
+        <button class="btn btn-primary" id="allow-mic">Allow microphone</button>
+        <span class="mic-status" id="mic-status" role="status"></span>
+      </div>
+    </section>
+
+    <section class="card">
+      <h2><span class="step-num">2</span>Record a meeting</h2>
+      <ol>
+        <li>Join a call on <a href="https://meet.google.com" target="_blank" rel="noopener">meet.google.com</a>.</li>
+        <li>Click the Meet Recorder icon in the toolbar. Pin it from the puzzle-piece menu to keep it handy.</li>
+        <li>Press <strong>Start recording</strong>. Meet's captions switch on and become the transcript.</li>
+        <li>Press <strong>Stop &amp; save</strong>, or just leave the call. The recording opens with its transcript.</li>
+      </ol>
+    </section>
+
+    <section class="card">
+      <h2><span class="step-num">3</span>Optional: AI transcription</h2>
+      <p>Add an OpenAI API key, or the address of a self-hosted Whisper server, in <a href="options.html">Settings</a> to transcribe recordings from their audio.</p>
+    </section>
+
+    <p class="banner banner-warn">Recording laws differ from place to place. Always tell participants before you record.</p>
+  </main>
+  <script type="module" src="welcome.js"></script>
+</body>
+</html>

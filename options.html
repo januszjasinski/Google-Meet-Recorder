@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meet Recorder Settings</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="base.css">
+  <style>
+    .head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+    .tag { margin-left: 6px; padding: 1px 7px; border-radius: 999px; background: var(--surface-2); color: var(--muted); font-size: 12px; font-weight: 600; vertical-align: 2px; }
+    .page-form { display: grid; gap: 16px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; }
+    .grid .wide { grid-column: 1 / -1; }
+    .field { align-content: start; }
+    .card > :is(.option, .field) { border-top: 1px solid var(--border); }
+    .card > h2 + :is(.option, .field) { margin-top: 8px; }
+    .card > :last-child { padding-bottom: 0; }
+    .save-row { display: flex; align-items: center; gap: 12px; }
+    .saved { color: var(--ok); font-weight: 600; }
+    @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <div class="head">
+      <h1>Settings</h1>
+      <a class="btn" href="recordings.html">Recordings</a>
+    </div>
+
+    <form id="form" class="page-form">
+      <section class="card">
+        <h2>Recording</h2>
+        <label class="option">
+          <span><strong>Include my microphone</strong><small>Mixes your voice into the recording. It's silenced while you're muted in Meet.</small></span>
+          <input type="checkbox" class="switch" name="includeMic">
+        </label>
+        <label class="field">
+          <span>Microphone</span>
+          <select class="input" name="micDeviceId" id="mic-device"><option value="">System default</option></select>
+          <small id="mic-help">Pick the same microphone you use in Meet.</small>
+        </label>
+        <label class="option">
+          <span><strong>Record video</strong><small>Turn off to record audio only, which makes much smaller files.</small></span>
+          <input type="checkbox" class="switch" name="recordVideo">
+        </label>
+        <label class="field">
+          <span>Video quality</span>
+          <select class="input" name="videoQuality">
+            <option value="1080p">1080p (up to about 1.9 GB per hour)</option>
+            <option value="720p">720p (up to about 1.2 GB per hour)</option>
+            <option value="480p">480p (up to about 0.5 GB per hour)</option>
+          </select>
+        </label>
+        <label class="option">
+          <span><strong>Turn on Meet captions automatically</strong><small>The transcript comes from Meet's live captions, with speaker names.</small></span>
+          <input type="checkbox" class="switch" name="autoEnableCaptions">
+        </label>
+        <label class="option">
+          <span><strong>Open the recording when it stops</strong><small>Shows the video and transcript in a new tab.</small></span>
+          <input type="checkbox" class="switch" name="openLibraryOnStop">
+        </label>
+      </section>
+
+      <section class="card">
+        <h2>AI transcription <span class="tag">optional</span></h2>
+        <p class="muted">Turn recorded audio into text with OpenAI Whisper or any OpenAI-compatible speech-to-text server, including a self-hosted one. Audio leaves your computer only when you transcribe a recording.</p>
+        <div class="grid">
+          <label class="field wide">
+            <span>API key</span>
+            <input class="input" type="password" name="apiKey" autocomplete="off" placeholder="sk-…">
+            <small>Stored only in this browser profile. Leave empty for servers that don't need one.</small>
+          </label>
+          <label class="field">
+            <span>Model</span>
+            <input class="input" name="model" list="models" placeholder="whisper-1">
+            <datalist id="models">
+              <option value="whisper-1">
+              <option value="gpt-4o-transcribe">
+              <option value="gpt-4o-mini-transcribe">
+            </datalist>
+            <small>Whisper models give exact timestamps. Others are estimated per sentence.</small>
+          </label>
+          <label class="field">
+            <span>Language</span>
+            <input class="input" name="language" placeholder="Auto-detect" maxlength="12">
+            <small>Optional ISO code, such as en, de or es.</small>
+          </label>
+          <label class="field wide">
+            <span>API address</span>
+            <input class="input" type="url" name="apiBaseUrl" required placeholder="https://api.openai.com/v1">
+          </label>
+        </div>
+        <label class="option">
+          <span><strong>Transcribe automatically</strong><small>Starts AI transcription when a finished recording opens.</small></span>
+          <input type="checkbox" class="switch" name="autoTranscribe">
+        </label>
+      </section>
+
+      <div class="save-row">
+        <button type="submit" class="btn btn-primary">Save settings</button>
+        <span class="saved" id="saved" role="status" hidden>Saved</span>
+        <span class="banner banner-error" id="error" hidden></span>
+      </div>
+    </form>
+  </main>
+  <script type="module" src="options.js"></script>
+</body>
+</html>

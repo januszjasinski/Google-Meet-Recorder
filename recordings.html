@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Meet Recordings</title>
+  <link rel="icon" href="icons/icon32.png">
+  <link rel="stylesheet" href="base.css">
+  <link rel="stylesheet" href="recordings.css">
+</head>
+<body>
+  <aside class="sidebar">
+    <div class="sidebar-head">
+      <h1><img src="icons/icon32.png" alt="" width="20" height="20"> Recordings</h1>
+      <a class="icon-btn" href="options.html" title="Settings" aria-label="Settings">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+      </a>
+    </div>
+    <ul class="rec-list" id="list"></ul>
+    <p class="list-empty" id="list-empty" hidden>No recordings yet. Start one from the extension icon during a Google Meet call.</p>
+    <footer class="storage" id="storage"></footer>
+  </aside>
+
+  <main class="detail">
+    <div class="detail-empty" id="detail-empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2.5" y="6" width="13" height="12" rx="2"/><path d="m15.5 10.5 6-3.5v10l-6-3.5"/></svg>
+      <p>Select a recording</p>
+    </div>
+
+    <article class="recording" id="recording" hidden>
+      <header class="rec-header">
+        <div class="rec-heading">
+          <h2 id="rec-title" contenteditable="plaintext-only" spellcheck="false" title="Click to rename"></h2>
+          <p class="rec-meta" id="rec-meta"></p>
+        </div>
+        <div class="rec-actions">
+          <button class="btn" id="download-media">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4v11m0 0-4-4m4 4 4-4M5 19h14"/></svg>
+            <span>Download video</span>
+          </button>
+          <button class="btn btn-danger" id="delete">Delete</button>
+        </div>
+      </header>
+      <p class="banner" id="rec-notice" hidden></p>
+
+      <div class="rec-body">
+        <div class="player-col">
+          <video id="player" controls preload="metadata"></video>
+          <p class="player-empty" id="player-empty" hidden></p>
+        </div>
+
+        <section class="transcript" aria-label="Transcript">
+          <div class="transcript-bar">
+            <div class="tabs" role="tablist">
+              <button role="tab" class="tab" id="tab-captions" data-source="captions">Meet captions</button>
+              <button role="tab" class="tab" id="tab-cloud" data-source="cloud">AI transcript</button>
+            </div>
+            <div class="transcript-actions">
+              <button class="btn btn-sm" id="copy" title="Copy transcript">Copy</button>
+              <button class="btn btn-sm" id="download-txt" title="Download as text">.txt</button>
+              <button class="btn btn-sm" id="download-srt" title="Download as subtitles">.srt</button>
+            </div>
+          </div>
+          <div class="progress" id="progress" hidden>
+            <div class="progress-label" id="progress-label"></div>
+            <div class="progress-track"><div class="progress-fill" id="progress-fill"></div></div>
+          </div>
+          <p class="banner banner-error transcript-error" id="transcript-error" hidden></p>
+          <div class="transcript-empty" id="transcript-empty" hidden>
+            <p id="transcript-empty-text"></p>
+            <button class="btn btn-primary" id="transcribe-empty">Transcribe audio with AI</button>
+          </div>
+          <ol class="lines" id="lines"></ol>
+          <div class="transcript-foot" id="transcript-foot" hidden>
+            <span class="muted" id="cloud-meta"></span>
+            <button class="btn btn-sm" id="transcribe">Transcribe audio with AI</button>
+          </div>
+        </section>
+      </div>
+    </article>
+  </main>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+  <script type="module" src="recordings.js"></script>
+</body>
+</html>

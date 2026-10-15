@@ -1,0 +1,40 @@
+{
+  "manifest_version": 3,
+  "name": "Meet Recorder & Transcriber",
+  "short_name": "Meet Recorder",
+  "version": "1.0.0",
+  "description": "Record Google Meet calls and get a speaker-labelled transcript. Recordings stay on your computer.",
+  "minimum_chrome_version": "116",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "Meet Recorder",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "options_ui": {
+    "page": "options.html",
+    "open_in_tab": true
+  },
+  "permissions": ["activeTab", "tabCapture", "offscreen", "scripting", "storage", "unlimitedStorage"],
+  "host_permissions": ["https://meet.google.com/*"],
+  "optional_host_permissions": ["https://*/*", "http://localhost/*", "http://127.0.0.1/*"],
+  "content_scripts": [
+    {
+      "matches": ["https://meet.google.com/*"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
