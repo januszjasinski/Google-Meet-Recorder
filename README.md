@@ -2,7 +2,7 @@
 
 A Chrome extension that records Google Meet calls (video + audio, including your own microphone) and captures a transcript with speaker names. Optionally, it can transcribe the recorded audio with OpenAI Whisper or any OpenAI-compatible speech-to-text server.
 
-Recordings are stored locally in the browser (IndexedDB). Nothing leaves your computer unless you run AI transcription.
+Recordings stay on your computer, inside Chrome's own storage. Nothing is uploaded unless you run AI transcription. See [Where files are saved](#where-files-are-saved).
 
 ## Install
 
@@ -34,6 +34,30 @@ In **Settings**, add an OpenAI API key, then press **Transcribe audio with AI** 
 - `whisper-1` (default) returns exact timestamps. `gpt-4o-transcribe` / `gpt-4o-mini-transcribe` are often more accurate; their timestamps are estimated per sentence.
 - Change **API address** to use another OpenAI-compatible server, such as a self-hosted Whisper (speaches / faster-whisper-server) or Groq. Chrome asks for permission to contact that host when you save.
 - Audio is uploaded in 10-minute parts (about 2.4 MB each), so long meetings stay under the 25 MB upload limit.
+
+## Where files are saved
+
+| What | Where |
+| --- | --- |
+| Recordings: video/audio, transcripts, and the audio kept for AI transcription | Chrome's storage for this extension (IndexedDB), inside your Chrome profile folder. Saved in 4-second pieces while you record. |
+| Downloads (`.webm`, `.txt`, `.srt`) | Your normal Chrome downloads folder, or wherever Chrome asks you to save. Files are only written there when you click a download button in the library. |
+| Settings, including the API key | Chrome's extension storage, in the same profile folder under `Local Extension Settings/<extension ID>`. |
+
+The recordings folder on disk is:
+
+- Windows: `%LOCALAPPDATA%\Google\Chrome\User Data\Default\IndexedDB\chrome-extension_<extension ID>_0.indexeddb.*`
+- macOS: `~/Library/Application Support/Google/Chrome/Default/IndexedDB/chrome-extension_<extension ID>_0.indexeddb.*`
+- Linux: `~/.config/google-chrome/Default/IndexedDB/chrome-extension_<extension ID>_0.indexeddb.*`
+
+`Default` is your first Chrome profile; other profiles are `Profile 1`, `Profile 2`, and so on. The extension ID is shown on `chrome://extensions`. These are Chrome's internal database files, not playable videos. To get real files, use the download buttons in the library.
+
+Good to know:
+
+- **Removing the extension deletes all its recordings.** Download anything you want to keep first. Deleting a recording in the library removes it from disk straight away.
+- **Keep the extension in the same folder.** Chrome gives an unpacked extension an ID based on its folder path. Loaded from a different folder, it counts as a new extension with an empty library.
+- **Disk space:** up to about 1.2 GB per hour at 720p, about 70 MB per hour audio-only. The library sidebar shows how much space recordings use.
+
+**What gets uploaded:** only when you run AI transcription, by clicking the button or turning on *Transcribe automatically*. The extension then sends the recording's audio, in 10-minute parts, to the API address in Settings (OpenAI by default). Video and captions are never uploaded by the extension. Meet's captions are produced by Google as part of the call; the extension only reads the text from the page.
 
 ## How it works
 
