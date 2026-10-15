@@ -76,8 +76,12 @@ function renderRecording() {
   show('recording');
   $('rec-title').textContent = state.title;
   $('goto-tab').hidden = activeTab?.id === state.tabId;
+  const notes = [
+    ...(state.problems || []).map((problem) => [problem.text, problem.level]),
+    ...(state.warnings || []).map((text) => [text, 'warning']),
+  ];
   $('warnings').replaceChildren(
-    ...(state.warnings || []).map((text) => Object.assign(document.createElement('li'), { textContent: text })),
+    ...notes.map(([text, level]) => Object.assign(document.createElement('li'), { textContent: text, className: level })),
   );
   const tick = () => {
     $('rec-time').textContent = clock(Date.now() - state.startedAt);
@@ -102,23 +106,28 @@ async function pollMeeting() {
   else if (page?.micMuted) setChip('chip-mic', 'Mic muted', 'warn');
   else setChip('chip-mic', 'Mic on', 'ok');
 
-  const count = page?.recording?.count || 0;
+  const captions = page?.recording;
+  const count = captions?.count || 0;
+  const unreadable = captions?.captionHealth === 'unreadable';
   if (!page) setChip('chip-captions', 'Meeting tab not responding', 'warn');
-  else if (count) setChip('chip-captions', `Transcript · ${count} ${count === 1 ? 'line' : 'lines'}`, 'ok');
+  else if (unreadable) setChip('chip-captions', "Can't read Meet's captions", 'warn');
   else if (page.captionsOn === false) setChip('chip-captions', 'Captions off: press CC in Meet', 'warn');
+  else if (count) setChip('chip-captions', `Transcript · ${count} ${count === 1 ? 'line' : 'lines'}`, 'ok');
   else setChip('chip-captions', 'Waiting for speech…');
 
-  for (const entry of page?.recording?.recent || []) live.set(entry.id, entry);
-  renderLive();
+  for (const entry of captions?.recent || []) live.set(entry.id, entry);
+  renderLive(unreadable);
 }
 
-function renderLive() {
+function renderLive(unreadable) {
   const box = $('live');
   const lines = [...live.values()].sort((a, b) => a.startMs - b.startMs).slice(-8);
   if (!lines.length) {
     box.replaceChildren(Object.assign(document.createElement('p'), {
       className: 'live-empty',
-      textContent: 'The transcript appears here as people speak.',
+      textContent: unreadable
+        ? "The extension can't find Meet's captions. If CC is on in Meet, Meet has probably changed its layout. The recording continues; transcribe its audio with AI afterwards."
+        : 'The transcript appears here as people speak.',
     }));
     return;
   }

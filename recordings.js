@@ -1,7 +1,7 @@
 import * as db from './lib/db.js';
 import { getSettings } from './lib/settings.js';
 import { fixWebmDuration } from './lib/webm.js';
-import { clock, humanDuration, formatBytes, formatDate, fileBaseName, transcriptText, transcriptSrt } from './lib/format.js';
+import { clock, humanDuration, formatBytes, formatDate, fileBaseName, mediaExtension, transcriptText, transcriptSrt } from './lib/format.js';
 import { transcribeRecording, ensureApiPermission, needsApiKey } from './lib/transcribe.js';
 
 const $ = (id) => document.getElementById(id);
@@ -142,7 +142,8 @@ async function loadMedia(target) {
   if (current !== target) return;
   if (!chunks.length) return setPlayerMessage('No audio or video was saved for this recording.');
   const type = rec.mimeType || chunks[0].type || 'video/webm';
-  const blob = await fixWebmDuration(new Blob(chunks, { type }), rec.durationMs);
+  const raw = new Blob(chunks, { type });
+  const blob = type.includes('webm') ? await fixWebmDuration(raw, rec.durationMs) : raw;
   if (current !== target) return;
   target.blob = blob;
   target.url = URL.createObjectURL(blob);
@@ -176,19 +177,32 @@ function renderDetail() {
   $('download-media').disabled = true;
   $('delete').disabled = live;
 
-  const notice = $('rec-notice');
-  notice.hidden = false;
+  const notices = [];
   if (live) {
-    notice.className = 'banner banner-info';
-    notice.textContent = 'This meeting is still being recorded. The video will be here once you stop recording.';
+    notices.push(['info', 'This meeting is still being recorded. The video will be here once you stop recording.']);
     setPlayerMessage('Recording in progress…');
   } else if (rec.status !== 'complete') {
-    notice.className = 'banner banner-warn';
-    notice.textContent = 'This recording was cut short (the browser or tab closed unexpectedly). Everything saved up to that point is here.';
-  } else {
-    notice.hidden = true;
+    notices.push(['warn', 'This recording was cut short (the browser or tab closed unexpectedly). Everything saved up to that point is here.']);
   }
+  for (const problem of rec.problems || []) {
+    notices.push([problem.level === 'warning' ? 'warn' : 'error', `While recording: ${problem.text}`]);
+  }
+  $('rec-notices').replaceChildren(...notices.map(([tone, text]) => el('p', `banner banner-${tone}`, text)));
   renderTranscript();
+}
+
+function emptyTranscriptText() {
+  const { rec, source, live } = current;
+  if (source === 'cloud') {
+    return live
+      ? 'Once the recording stops, you can turn its audio into text with OpenAI Whisper or another speech-to-text service.'
+      : 'Turn the recorded audio into text with OpenAI Whisper or another OpenAI-compatible speech-to-text service. Useful if captions were off, or for a second, more accurate pass.';
+  }
+  if (live) return 'Waiting for captions… Make sure captions (CC) are turned on in Meet.';
+  if (rec.captionsUnreadable) {
+    return "Meet's captions couldn't be read during this call. Meet has probably changed its layout, which stops caption reading from working until the extension is updated. Transcribe the recorded audio with AI instead.";
+  }
+  return "No captions were captured. Meet's captions have to be on during the call (the extension turns them on unless that's disabled in settings). You can still transcribe the recorded audio with AI.";
 }
 
 function linesFor(source) {
@@ -211,16 +225,7 @@ function renderTranscript() {
   const empty = !lines.length && !(busy && source === 'cloud');
   $('transcript-empty').hidden = !empty;
   $('transcribe-empty').hidden = live || busy;
-  if (empty) {
-    $('transcript-empty-text').textContent =
-      source === 'cloud'
-        ? live
-          ? 'Once the recording stops, you can turn its audio into text with OpenAI Whisper or another speech-to-text service.'
-          : 'Turn the recorded audio into text with OpenAI Whisper or another OpenAI-compatible speech-to-text service. Useful if captions were off, or for a second, more accurate pass.'
-        : live
-          ? 'Waiting for captions… Make sure captions (CC) are turned on in Meet.'
-          : "No captions were captured. Meet's captions have to be on during the call (the extension turns them on unless that's disabled in settings). You can still transcribe the recorded audio with AI.";
-  }
+  if (empty) $('transcript-empty-text').textContent = emptyTranscriptText();
 
   $('transcript-foot').hidden = !lines.length || live;
   $('cloud-meta').textContent =
@@ -289,7 +294,7 @@ function saveFile(blob, filename) {
 }
 
 function downloadMedia() {
-  if (current?.blob) saveFile(current.blob, `${fileBaseName(current.rec)}.webm`);
+  if (current?.blob) saveFile(current.blob, `${fileBaseName(current.rec)}.${mediaExtension(current.blob.type)}`);
 }
 
 function downloadTranscript(kind) {

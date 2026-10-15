@@ -14,6 +14,8 @@
   const TICK_MS = 400;
   const FLUSH_MS = 2000;
   const END_AFTER_TICKS = 8; // ~3 s without any in-call UI means the user left
+  // In the call, captions not known to be off, and still no captions area: Meet's layout has likely changed.
+  const UNREADABLE_AFTER_MS = 20_000;
 
   let session = null;
   let micObserver = null;
@@ -152,9 +154,10 @@
     return entry;
   }
 
+  /** Reads the visible captions into entries. Returns whether the captions area was found. */
   function scan() {
     const region = findCaptionRegion();
-    if (!region) return;
+    if (!region) return false;
     const now = Date.now() - session.startedAt;
     for (const block of captionBlocks(region)) {
       const { speaker, text } = parseBlock(block);
@@ -167,6 +170,26 @@
       entry.endMs = now;
       session.dirty.add(entry);
     }
+    return true;
+  }
+
+  function checkCaptionHealth(regionFound) {
+    if (!session.joined || regionFound || captionsOn() === false) {
+      session.blindSince = null;
+      return;
+    }
+    session.blindSince ??= Date.now();
+    if (!session.unreadableReported && captionHealth() === 'unreadable') {
+      session.unreadableReported = true;
+      send({ type: 'captions-unreadable', recordingId: session.recordingId });
+    }
+  }
+
+  /** 'unreadable' | 'off' | 'ok' | 'waiting' */
+  function captionHealth() {
+    if (session.blindSince && Date.now() - session.blindSince >= UNREADABLE_AFTER_MS) return 'unreadable';
+    if (captionsOn() === false) return 'off';
+    return session.order.some((e) => e.text) ? 'ok' : 'waiting';
   }
 
   const toRecord = ({ id, speaker, text, startMs, endMs }) => ({ id, speaker, text, startMs, endMs });
@@ -210,13 +233,15 @@
   function tick() {
     if (!isAlive()) return teardown();
     if (!session) return;
+    let regionFound = false;
     try {
-      scan();
+      regionFound = scan();
     } catch (err) {
       console.debug('[Meet Recorder] caption scan failed', err);
     }
     checkMic();
     checkCall();
+    checkCaptionHealth(regionFound);
     maybeEnableCaptions();
   }
 
@@ -236,6 +261,8 @@
       outOfCallTicks: 0,
       captionsHandled: false,
       enabledCaptions: false,
+      blindSince: null,
+      unreadableReported: false,
     };
     session.tickTimer = setInterval(tick, TICK_MS);
     session.flushTimer = setInterval(flush, FLUSH_MS);
@@ -270,7 +297,14 @@
       micMuted: isMicMuted(),
       captionsOn: captionsOn(),
       title: meetingName(),
-      recording: session ? { recordingId: session.recordingId, count: lines.length, recent: lines.slice(-20).map(toRecord) } : null,
+      recording: session
+        ? {
+            recordingId: session.recordingId,
+            count: lines.length,
+            captionHealth: captionHealth(),
+            recent: lines.slice(-20).map(toRecord),
+          }
+        : null,
     };
   }
 

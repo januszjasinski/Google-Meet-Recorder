@@ -65,10 +65,17 @@ function notifyUi(type) {
   chrome.runtime.sendMessage({ target: 'ui', type }).catch(() => {});
 }
 
-async function setBadge(recording) {
-  await chrome.action.setBadgeBackgroundColor({ color: '#d93025' });
-  await chrome.action.setBadgeText({ text: recording ? 'REC' : '' });
-  await chrome.action.setTitle({ title: recording ? 'Meet Recorder: recording' : 'Meet Recorder' });
+const BADGES = {
+  recording: { text: 'REC', color: '#d93025', title: 'Meet Recorder: recording' },
+  problem: { text: '!', color: '#e37400', title: 'Meet Recorder: recording problem, click for details' },
+  idle: { text: '', color: '#d93025', title: 'Meet Recorder' },
+};
+
+async function setBadge(mode) {
+  const badge = BADGES[mode] || BADGES.idle;
+  await chrome.action.setBadgeBackgroundColor({ color: badge.color });
+  await chrome.action.setBadgeText({ text: badge.text });
+  await chrome.action.setTitle({ title: badge.title });
 }
 
 /** Pings the Meet tab's content script, injecting it first if the tab predates the extension. */
@@ -121,6 +128,7 @@ async function startRecording(tabId) {
       micDeviceId: settings.micDeviceId,
       recordVideo: settings.recordVideo,
       videoQuality: settings.videoQuality,
+      fileFormat: settings.fileFormat,
     },
   }).catch((err) => ({ ok: false, error: err.message }));
   if (!res?.ok) {
@@ -130,9 +138,9 @@ async function startRecording(tabId) {
   }
 
   await db.updateRecording(recordingId, { startedAt: res.startedAt, mimeType: res.mimeType, hasMic: res.hasMic });
-  const state = { recordingId, tabId, title, startedAt: res.startedAt, hasMic: res.hasMic, warnings: res.warnings || [] };
+  const state = { recordingId, tabId, title, startedAt: res.startedAt, hasMic: res.hasMic, warnings: res.warnings || [], problems: [] };
   await setState(state);
-  await setBadge(true);
+  await setBadge('recording');
   await sendToTab(tabId, {
     type: 'captions-start',
     recordingId,
@@ -162,7 +170,7 @@ async function stopRecording(reason) {
     ...(finished ? { durationMs: result.durationMs, size: result.size } : {}),
   });
   await setState(null);
-  await setBadge(false);
+  await setBadge('idle');
   notifyUi('state-changed');
 
   if (settings.openLibraryOnStop) {
@@ -178,7 +186,7 @@ async function recoverInterrupted() {
   if (state && (await hasOffscreen())) return;
   if (state) {
     await setState(null);
-    await setBadge(false);
+    await setBadge('idle');
   }
   for (const rec of await db.listRecordings()) {
     if (rec.status === 'recording') await db.updateRecording(rec.id, { status: 'interrupted' });
@@ -219,8 +227,25 @@ const handlers = {
     serialize(() => stopRecording('capture-ended'));
     return {};
   },
-  'recorder-error'(msg) {
-    console.error('Recorder error:', msg.detail);
+  'recorder-stopped'() {
+    serialize(() => stopRecording('recorder-error'));
+    return {};
+  },
+  async 'recorder-error'(msg) {
+    const problem = { level: msg.level === 'warning' ? 'warning' : 'error', text: msg.detail };
+    // Saved on the recording itself so the library still shows it after the call.
+    await db.updateRecording(msg.recordingId, (rec) => ({ problems: [...(rec.problems || []), problem] }));
+    await serialize(async () => {
+      const state = await getState();
+      if (state?.recordingId !== msg.recordingId) return;
+      await setState({ ...state, problems: [...(state.problems || []), problem] });
+      if (problem.level === 'error') await setBadge('problem');
+      notifyUi('state-changed');
+    });
+    return {};
+  },
+  async 'captions-unreadable'(msg, sender) {
+    if (await isCurrent(msg, sender)) await db.updateRecording(msg.recordingId, { captionsUnreadable: true });
     return {};
   },
 };

@@ -45,6 +45,14 @@
           <input type="checkbox" class="switch" name="recordVideo">
         </label>
         <label class="field">
+          <span>File format</span>
+          <select class="input" name="fileFormat">
+            <option value="mp4">MP4: opens in any player, including QuickTime on Mac</option>
+            <option value="webm">WebM: open format; plays in Chrome and VLC, not QuickTime</option>
+          </select>
+          <small>If Chrome can't record MP4 on this computer, it records WebM instead.</small>
+        </label>
+        <label class="field">
           <span>Video quality</span>
           <select class="input" name="videoQuality">
             <option value="1080p">1080p (up to about 1.9 GB per hour)</option>

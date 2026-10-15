@@ -1,0 +1,55 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Mock Google Meet</title>
+<style>body { font: 14px sans-serif; } img { width: 20px; height: 20px; }</style>
+<!-- A stand-in for the parts of the Meet page the content script reads. -->
+<div class="controls">
+  <button id="mic" data-is-muted="false" aria-label="Turn off microphone (ctrl + d)"><i class="google-symbols">mic</i></button>
+  <button data-is-muted="false" aria-label="Turn off camera (ctrl + e)"><i class="google-symbols">videocam</i></button>
+  <button id="cc" aria-label="Turn on captions (c)" aria-pressed="false"><i class="google-symbols">closed_caption_off</i></button>
+  <button id="leave" aria-label="Leave call"><i class="google-symbols">call_end</i></button>
+</div>
+<div data-meeting-title="Weekly product sync"></div>
+<div id="tiles"><div data-participant-id="p1">Alice</div></div>
+<div role="region" aria-label="Captions" id="captions"><div id="wrap"></div></div>
+<script>
+  // Controllable clock, so time-based checks don't need real waits.
+  window.clockOffset = 0;
+  const realNow = Date.now;
+  Date.now = () => realNow() + window.clockOffset;
+
+  // Fake extension messaging: record what the content script sends, and let tests talk to it.
+  window.sent = [];
+  window.chrome = {
+    runtime: {
+      id: 'test',
+      sendMessage: (m) => { window.sent.push(JSON.parse(JSON.stringify(m))); return Promise.resolve(); },
+      onMessage: { addListener: (fn) => (window.listener = fn), removeListener() {} },
+    },
+  };
+  window.ask = (msg) => new Promise((resolve) => window.listener({ target: 'content', ...msg }, {}, resolve));
+
+  // Meet's captions button toggles its icon between closed_caption_off and closed_caption.
+  window.ccClicks = 0;
+  document.getElementById('cc').addEventListener('click', (e) => {
+    window.ccClicks++;
+    window.setCaptionsButton(e.currentTarget.getAttribute('aria-pressed') !== 'true');
+  });
+  window.setCaptionsButton = (on) => {
+    const button = document.getElementById('cc');
+    button.setAttribute('aria-pressed', String(on));
+    button.firstElementChild.textContent = on ? 'closed_caption' : 'closed_caption_off';
+  };
+
+  // One caption block per speaker turn: [avatar + name] [text]
+  window.addBlock = (parent, name, text) => {
+    const block = document.createElement('div');
+    block.innerHTML = '<div class="hdr"><img alt=""><div class="nm"></div></div><div class="tx"></div>';
+    block.querySelector('.nm').textContent = name;
+    block.querySelector('.tx').textContent = text;
+    parent.append(block);
+    return block;
+  };
+  window.setText = (block, text) => { block.querySelector('.tx').textContent = text; };
+</script>
+<script src="/ext/content.js"></script>

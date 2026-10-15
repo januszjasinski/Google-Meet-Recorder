@@ -35,6 +35,7 @@ body { width: 360px; }
 .warnings { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
 .warnings:empty { display: none; }
 .warnings li { padding: 8px 10px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: 12.5px; }
+.warnings li.error { background: var(--rec-soft); color: var(--rec-strong); }
 
 .live {
   display: flex; flex-direction: column; gap: 8px; height: 180px; overflow-y: auto; padding: 10px 12px;

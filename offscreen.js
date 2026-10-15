@@ -3,12 +3,26 @@
 
 import * as db from './lib/db.js';
 import { VIDEO_QUALITY } from './lib/settings.js';
+import { formatBytes } from './lib/format.js';
 
 const CHUNK_MS = 4000;
+// Chrome writes MP4 data out only at video keyframes, so ask for one every 2 s to keep chunks flowing to disk.
+const KEYFRAME_MS = 2000;
 // Speech-to-text APIs cap uploads at 25 MB; 10 minutes of 32 kbps Opus is about 2.4 MB.
 const SEGMENT_MS = 10 * 60 * 1000;
 const SEGMENT_TYPE = 'audio/webm;codecs=opus';
 const MIC_TIMEOUT_MS = 5000;
+const SPACE_CHECK_MS = 60_000;
+const LOW_SPACE_BYTES = 1024 ** 3;
+
+// MP4 (H.264 + AAC) opens everywhere, QuickTime included. WebM is the fallback where Chrome can't encode MP4.
+const FORMATS = {
+  mp4: { video: ['video/mp4;codecs=avc1,mp4a.40.2'], audio: ['audio/mp4;codecs=mp4a.40.2'] },
+  webm: {
+    video: ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm'],
+    audio: ['audio/webm;codecs=opus', 'audio/webm'],
+  },
+};
 
 let session = null;
 
@@ -28,16 +42,46 @@ function notify(type, extra = {}) {
   chrome.runtime.sendMessage({ target: 'background', type, ...extra }).catch(() => {});
 }
 
-function fail(err) {
+const PROBLEMS = {
+  save: 'Parts of the recording could not be saved',
+  audio: 'Audio for AI transcription could not be saved',
+  recorder: 'The recorder stopped unexpectedly. Everything up to that point is saved',
+};
+
+/** Tells the background (and so the popup and library) about a failure, once per kind of problem. */
+function report(s, kind, err) {
   console.error(err);
-  notify('recorder-error', { detail: err?.message || String(err) });
+  const diskFull = err?.name === 'QuotaExceededError';
+  const key = diskFull ? 'disk-full' : kind;
+  if (s.reported.has(key)) return;
+  s.reported.add(key);
+  const detail = diskFull
+    ? 'Your disk is full, so the recording can no longer be saved. Free up space or stop recording.'
+    : `${PROBLEMS[kind]} (${err?.message || err}).`;
+  notify('recorder-error', { recordingId: s.recordingId, level: 'error', detail });
 }
 
-function pickMimeType(video) {
-  const types = video
-    ? ['video/webm;codecs=vp8,opus', 'video/webm;codecs=vp9,opus', 'video/webm']
-    : ['audio/webm;codecs=opus', 'audio/webm'];
-  return types.find((type) => MediaRecorder.isTypeSupported(type)) || '';
+async function checkSpace(s) {
+  if (s.reported.has('low-space') || s.reported.has('disk-full')) return;
+  try {
+    const { quota, usage } = await navigator.storage.estimate();
+    const left = quota - usage;
+    if (left >= LOW_SPACE_BYTES) return;
+    s.reported.add('low-space');
+    notify('recorder-error', {
+      recordingId: s.recordingId,
+      level: 'warning',
+      detail: `Disk space is running low (about ${formatBytes(left)} left). The recording stops being saved when it runs out.`,
+    });
+  } catch {
+    // No estimate available; a failed write is still reported.
+  }
+}
+
+function pickMimeType(video, fileFormat) {
+  const kind = video ? 'video' : 'audio';
+  const formats = fileFormat === 'webm' ? [FORMATS.webm] : [FORMATS.mp4, FORMATS.webm];
+  return formats.flatMap((format) => format[kind]).find((type) => MediaRecorder.isTypeSupported(type)) || '';
 }
 
 async function getMic(deviceId) {
@@ -107,11 +151,12 @@ async function start({ streamId, recordingId, settings, micMuted }) {
     playback.play().catch(() => {});
   }
 
-  const mimeType = pickMimeType(settings.recordVideo);
+  const mimeType = pickMimeType(settings.recordVideo, settings.fileFormat);
   const recorder = new MediaRecorder(new MediaStream([...tabStream.getVideoTracks(), audioTrack]), {
     mimeType,
     videoBitsPerSecond: quality.bitrate,
     audioBitsPerSecond: 128_000,
+    videoKeyFrameIntervalDuration: KEYFRAME_MS,
   });
   const s = {
     recordingId,
@@ -129,6 +174,8 @@ async function start({ streamId, recordingId, settings, micMuted }) {
     segment: null,
     segmentSeq: 0,
     segmentTimer: 0,
+    spaceTimer: 0,
+    reported: new Set(),
     stopping: null,
   };
 
@@ -136,9 +183,12 @@ async function start({ streamId, recordingId, settings, micMuted }) {
     if (!event.data.size) return;
     s.size += event.data.size;
     const totals = { size: s.size, durationMs: Date.now() - s.startedAt };
-    s.writes.push(db.putChunk(recordingId, s.seq++, event.data, totals).catch(fail));
+    s.writes.push(db.putChunk(recordingId, s.seq++, event.data, totals).catch((err) => report(s, 'save', err)));
   };
-  recorder.onerror = (event) => fail(event.error || new Error('MediaRecorder failed'));
+  recorder.onerror = (event) => {
+    report(s, 'recorder', event.error || new Error('MediaRecorder failed'));
+    if (!s.stopping) notify('recorder-stopped');
+  };
   for (const track of tabStream.getTracks()) {
     track.addEventListener('ended', () => {
       if (session === s && !s.stopping) notify('capture-ended');
@@ -151,6 +201,8 @@ async function start({ streamId, recordingId, settings, micMuted }) {
     startSegment(s);
     s.segmentTimer = setInterval(() => rotateSegment(s), SEGMENT_MS);
   }
+  s.spaceTimer = setInterval(() => checkSpace(s), SPACE_CHECK_MS);
+  checkSpace(s);
   session = s;
   return { startedAt: s.startedAt, mimeType: s.mimeType, hasMic: Boolean(micGain), warnings };
 }
@@ -163,12 +215,13 @@ function startSegment(s) {
   recorder.ondataavailable = (event) => {
     if (event.data.size) parts.push(event.data);
   };
+  recorder.onerror = (event) => report(s, 'audio', event.error || new Error('MediaRecorder failed'));
   segment.saved = new Promise((resolve) => {
     recorder.onstop = () => {
       const blob = new Blob(parts, { type: SEGMENT_TYPE });
       if (!blob.size) return resolve();
       db.putAudio({ recordingId: s.recordingId, seq: segment.seq, startMs: segment.startMs, endMs: Date.now() - s.startedAt, blob })
-        .catch(fail)
+        .catch((err) => report(s, 'audio', err))
         .finally(resolve);
     };
   });
@@ -201,6 +254,7 @@ async function stop() {
 async function finish(s) {
   const durationMs = Date.now() - s.startedAt;
   clearInterval(s.segmentTimer);
+  clearInterval(s.spaceTimer);
   await Promise.all([stopRecorder(s.recorder), s.segment && stopRecorder(s.segment.recorder)]);
   if (s.segment) s.writes.push(s.segment.saved);
   await Promise.allSettled(s.writes);

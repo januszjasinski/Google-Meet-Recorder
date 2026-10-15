@@ -1,0 +1,91 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Recording file checks</title>
+<script type="module">
+import { fixWebmDuration } from '/ext/lib/webm.js';
+
+// Records a few seconds from a canvas + tone, the same way the extension records a tab.
+async function record(mimeType, ms, withVideo, options = {}) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 640;
+  canvas.height = 360;
+  const g = canvas.getContext('2d');
+  let frame = 0;
+  const draw = setInterval(() => {
+    g.fillStyle = `hsl(${(frame++ * 9) % 360} 70% 50%)`;
+    g.fillRect(0, 0, canvas.width, canvas.height);
+  }, 33);
+  const audio = new AudioContext();
+  const tone = audio.createOscillator();
+  const out = audio.createMediaStreamDestination();
+  tone.connect(out);
+  tone.start();
+  const tracks = [...(withVideo ? canvas.captureStream(30).getVideoTracks() : []), ...out.stream.getAudioTracks()];
+  const recorder = new MediaRecorder(new MediaStream(tracks), { mimeType, ...options });
+  const chunks = [];
+  recorder.ondataavailable = (e) => e.data.size && chunks.push(e.data);
+  const started = Date.now();
+  recorder.start(1000);
+  await new Promise((r) => setTimeout(r, ms));
+  const stopped = new Promise((r) => (recorder.onstop = r));
+  recorder.stop();
+  await stopped;
+  clearInterval(draw);
+  audio.close();
+  return { blob: new Blob(chunks, { type: recorder.mimeType }), chunks: chunks.length, durationMs: Date.now() - started };
+}
+
+function duration(blob) {
+  return new Promise((resolve) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    video.onloadedmetadata = () => resolve(String(video.duration));
+    video.onerror = () => resolve(`error: ${video.error?.message}`);
+    video.src = URL.createObjectURL(blob);
+  });
+}
+
+function seek(blob, seconds) {
+  return new Promise((resolve) => {
+    const video = document.createElement('video');
+    video.muted = true;
+    video.onloadedmetadata = () => (video.currentTime = seconds);
+    video.onseeked = () => resolve(video.currentTime);
+    video.onerror = () => resolve(`error: ${video.error?.message}`);
+    setTimeout(() => resolve('timeout'), 5000);
+    video.src = URL.createObjectURL(blob);
+  });
+}
+
+window.checkWebm = async (mimeType, withVideo) => {
+  const r = await record(mimeType, 3200, withVideo);
+  const fixed = await fixWebmDuration(r.blob, r.durationMs);
+  const refixed = await fixWebmDuration(fixed, r.durationMs + 1000);
+  return {
+    durationMs: r.durationMs,
+    raw: await duration(r.blob),
+    fixed: Number(await duration(fixed)),
+    refixed: Number(await duration(refixed)),
+    fixedSize: fixed.size,
+    refixedSize: refixed.size,
+    seekedTo: await seek(fixed, r.durationMs / 1000 - 0.4),
+  };
+};
+
+window.checkMp4 = async () => {
+  const type = 'video/mp4;codecs=avc1,mp4a.40.2';
+  if (!MediaRecorder.isTypeSupported(type)) return { supported: false };
+  const r = await record(type, 5000, true, { videoKeyFrameIntervalDuration: 1000 });
+  const fixed = await fixWebmDuration(r.blob, r.durationMs);
+  return {
+    supported: true,
+    durationMs: r.durationMs,
+    chunks: r.chunks,
+    duration: Number(await duration(r.blob)),
+    seekedTo: await seek(r.blob, r.durationMs / 1000 - 0.5),
+    untouchedByWebmFix: fixed === r.blob,
+  };
+};
+
+window.ready = true;
+</script>

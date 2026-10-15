@@ -37,6 +37,9 @@ body { display: grid; grid-template-columns: 300px minmax(0, 1fr); height: 100vh
 .rec-meta { margin: 0; color: var(--muted); }
 .rec-actions { display: flex; gap: 8px; }
 
+.notices { display: grid; gap: 8px; }
+.notices:empty { display: none; }
+
 .rec-body { display: grid; grid-template-columns: minmax(0, 1fr); align-content: start; gap: 18px; }
 
 .player-col { min-width: 0; }
